@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BriefFlow - 3分で掴むAIニュース</title>
+  <!-- 引入 Tailwind CSS (无需安装，直接通过CDN加载现代UI样式) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+  <!-- 顶部导航栏 (Header) -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-extrabold text-indigo-600 tracking-tight">⚡ BriefFlow</h1>
+        <p class="text-xs text-slate-500">AIが選び抜いた「今日知るべきこと」だけを3分で</p>
+      </div>
+      <button onclick="fetchNews()" id="refreshBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm cursor-pointer">
+        🔄 最新ニュースを取得
+      </button>
+    </div>
+  </header>
+
+  <!-- 主体内容区 (Main Content) -->
+  <main class="max-w-3xl mx-auto px-4 py-8">
+    <!-- 加载中动画 (Loading State) -->
+    <div id="loading" class="text-center py-12 hidden">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+      <p class="mt-3 text-sm text-slate-600 font-medium">📡 NHKからニュースを取得し、AIが重要度を分析中...</p>
+    </div>
+
+    <!-- 新闻卡片容器 -->
+    <div id="newsContainer" class="space-y-6"></div>
+  </main>
+
+  <script>
+    // 重要度ランクに応じたバッジの色設定
+    const rankStyles = {
+      "S": "bg-rose-100 text-rose-700 border-rose-300",
+      "A": "bg-amber-100 text-amber-700 border-amber-300",
+      "B": "bg-slate-100 text-slate-600 border-slate-300"
+    };
+
+    const rankLabels = {
+      "S": "🔥 Sランク：必読",
+      "A": "✨ Aランク：推奨",
+      "B": "☕ Bランク：流し読み"
+    };
+
+    async function fetchNews() {
+      const container = document.getElementById('newsContainer');
+      const loading = document.getElementById('loading');
+      const btn = document.getElementById('refreshBtn');
+
+      // 表示をリセットしてローディングを表示
+      container.innerHTML = '';
+      loading.classList.remove('hidden');
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+
+      try {
+        // FastAPIバックエンドへリクエスト送信 (非同期通信)
+        const response = await fetch('http://127.0.0.1:8000/api/news?limit=3');
+        const articles = await response.json();
+
+        articles.forEach(item => {
+          const evalData = item.evaluation;
+          const badgeStyle = rankStyles[evalData.importance_rank] || rankStyles["B"];
+          const badgeText = rankLabels[evalData.importance_rank] || `ランク: ${evalData.importance_rank}`;
+
+          // 3行要約のリストHTMLを生成
+          const summaryHtml = evalData.summary_3lines
+            .map(line => `<li class="flex items-start gap-2"><span class="text-indigo-500 font-bold">・</span><span>${line}</span></li>`)
+            .join('');
+
+          // カードのHTMLを組み立て
+          const card = `
+            <article class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <span class="px-3 py-1 text-xs font-bold rounded-full border ${badgeStyle}">
+                  ${badgeText}
+                </span>
+                <span class="text-xs font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded">
+                  🏷️ ${evalData.category}
+                </span>
+              </div>
+
+              <h2 class="text-lg font-bold text-slate-900 mb-3 leading-snug">
+                <a href="${item.link}" target="_blank" class="hover:text-indigo-600 transition">
+                  ${item.title} ↗
+                </a>
+              </h2>
+
+              <!-- 3行要約ボックス -->
+              <div class="bg-slate-50 rounded-lg p-4 mb-3 border border-slate-100">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-2">📝 AI 3行要約</p>
+                <ul class="text-sm text-slate-700 space-y-1.5">
+                  ${summaryHtml}
+                </ul>
+              </div>
+
+              <!-- AIの選出理由 -->
+              <div class="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                <p>💡 <strong class="text-slate-700">選出理由:</strong> ${evalData.reason}</p>
+                <span class="shrink-0 ml-2">${new Date(item.published).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'})} 配信</span>
+              </div>
+            </article>
+          `;
+          container.insertAdjacentHTML('beforeend', card);
+        });
+      } catch (error) {
+        container.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-sm">エラーが発生しました。FastAPIサーバー (uvicorn) が起動しているか確認してください。</div>`;
+      } finally {
+        loading.classList.add('hidden');
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+      }
+    }
+
+    // ページ読み込み時に自動でニュースを取得
+    window.onload = fetchNews;
+  </script>
+</body>
+</html>
