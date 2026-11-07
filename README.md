@@ -1,5 +1,6 @@
 # ⚡ BriefFlow（ブリーフ・フロー）
 
+![BriefFlow Demo](./demo.png)
 **〜「読む手間」をゼロにし、1日3分で社会の動きを掴むAIパーソナライズド・ニュースアプリ〜**
 
 ## 📌 1. 開発背景と課題（Background & Problem）
