@@ -4,18 +4,21 @@ from pydantic import BaseModel
 from google import genai
 from dotenv import load_dotenv
 
-# 既存のモジュール（news_analyzer.py）から関数とモデルを読み込む
 from news_analyzer import fetch_nhk_news, analyze_news_with_ai, NewsEvaluation
+# 👇 新增：引入刚刚写好的 SQL 数据库操作函数
+from database import init_db, get_cached_evaluation, save_evaluation_to_db
 
 load_dotenv()
 
+# サーバー起動時にSQLiteデータベースとテーブルを自動作成
+init_db()
+
 app = FastAPI(
     title="BriefFlow API",
-    description="AIパーソナライズド・ニュースアプリのバックエンドAPI",
-    version="0.1.0"
+    description="AIパーソナライズド・ニュースアプリのバックエンドAPI（SQLキャッシュ対応）",
+    version="0.2.0"
 )
 
-# フロントエンド（Next.js等）からのアクセスを許可するCORS設定
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,7 +27,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# APIが返す1記事あたりのデータ構造
 class ArticleResponse(BaseModel):
     title: str
     link: str
@@ -33,7 +35,6 @@ class ArticleResponse(BaseModel):
 
 @app.get("/api/news", response_model=list[ArticleResponse])
 def get_personalized_news(limit: int = 3):
-    """最新ニュースを取得し、AIによる要約と重要度ランクを付与して返すエンドポイント"""
     client = genai.Client()
     user_profile = "日本のIT業界への就職を目指している学生。AI技術、Web開発、経済動向に関心がある。"
 
@@ -41,7 +42,19 @@ def get_personalized_news(limit: int = 3):
     results = []
 
     for article in raw_articles:
-        eval_result = analyze_news_with_ai(client, article, user_profile)
+        # 1. まずSQLデータベースにキャッシュがあるか確認（SELECT）
+        cached_eval = get_cached_evaluation(article["link"])
+
+        if cached_eval:
+            print(f"⚡ [SQL Cache Hit] DBから高速取得: {article['title'][:20]}...")
+            eval_result = cached_eval
+        else:
+            # 2. DBに無い新しいニュースだけAIを呼び出し（コストと時間の節約！）
+            print(f"🆕 [New Article] AIで新規分析中: {article['title'][:20]}...")
+            eval_result = analyze_news_with_ai(client, article, user_profile)
+            # 3. 分析結果をSQLデータベースに保存（INSERT）
+            save_evaluation_to_db(article, eval_result)
+
         results.append(
             ArticleResponse(
                 title=article["title"],

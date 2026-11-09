@@ -34,6 +34,7 @@
 | **Backend**           | Python 3.12 / FastAPI / Uvicorn             | AIライブラリとの親和性が高く、高速なAPIレスポンスおよびSwagger UIによる自動ドキュメント生成が可能なため。         |
 | **AI / LLM**          | Google Gemini API (`google-genai`)          | 最新の軽量・高速モデルを活用し、構造化出力（Structured Outputs）による安定したJSON生成を実現するため。            |
 | **Data / Validation** | `feedparser` / `Pydantic` / `python-dotenv` | RSSの解析、AI出力の厳格な型定義（Type Safety）、および環境変数による機密情報（APIキー）の安全な管理のため。       |
+| **Database**          | SQLite3 (`sqlite3`)                         | AIの分析結果を永続化・キャッシュし、2回目以降のアクセスを高速化（0.01秒以下）およびAPIコストを削減するため。      |
 
 ---
 
@@ -55,6 +56,10 @@ LLMの出力は揺らぎが発生しやすいため、`Pydantic` の `BaseModel`
 ### ③ ハルシネーション対策
 
 事実に基づいた正確なニュース要約を生成するため、プロンプトでの制約に加えて `temperature=0.2` と低く設定し、LLMのランダム性（幻覚の発生）を抑制しています。また、必ず元記事（NHK）へのリンクを明記し、情報の透明性を確保しています。
+
+### ④ SQLデータベースによるキャッシュ機構（ETLパイプラインの構築）
+
+リクエストごとにLLMを呼び出すことによるレイテンシ（遅延）とAPIコストの増大を防ぐため、`SQLite` を用いたデータ永続化層（`database.py`）を実装しました。記事のURLを主キー（`PRIMARY KEY`）として管理し、未分析の新規記事のみAI推論を行って `INSERT` し、既知の記事は `SELECT` で高速に返却するキャッシュ機構を構築しています。また、プレースホルダ（`?`）を用いたSQLインジェクション対策も施しています。
 
 ---
 
